@@ -168,7 +168,7 @@ typedef LONG FXPT2DOT30, *LPFXPT2DOT30;
 
 
 
-require "guiddef"
+dofile "guiddef.lua"
 
 
 
