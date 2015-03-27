@@ -42,29 +42,25 @@ end
 
 -- Benchmarking support.
 do
-	local function runbenchmark(name, code, count, ob, pre_code)
-		local code = [[
-			local math_floor = math.floor
-			local function as_int(v) return v - (v%1) end
-			local function is_int(v) return v%1 == 0 end
-		]]
-
-		if pre_code then
-			code = code .. pre_code
-		end
-
+	local function runbenchmark(name, code_to_run, count, ob, pre_code)
+		local code = pre_code or ""
 		code = code .. [[
-			local count,ob = ...
+			local count, ob = ...
 			local clock = GetCurrentTickTime
 			local start = clock()
-			for i=1,count do ]] .. code .. [[ end
+			for i=1,count do ]] .. code_to_run .. [[ end
 			return (clock() - start)*1000
 		]]
 		local f, msg = loadstring(code)
 		if not f then
-			io.write(string.format("Failed to load test %q:\n%s", name, msg))
+			print(string.format("Failed to load test %q:\n%s", name, msg))
 		else
-			io.write(string.format("%6.3f ms\t%s\n", f(count, ob), name))
+			jit.off()
+			time = f(count, ob)
+			print(string.format("NJ: %-6.3f ms\t%s", time, name))
+			jit.on()
+			local time = f(count, ob)
+			print(string.format(" J: %-6.3f ms\t%s", time, name))
 		end
 	end
 
@@ -129,11 +125,6 @@ function iterate_pairs(tab)
 	end
 end
 
-if jit then
-	io.write("JIT OFF\n")
-	jit.off()
-end
-
 addbenchmark("Standard (solid)", "ob:test()", makeob1())
 addbenchmark("Standard (metatable)", "ob:test()", makeob2())
 
@@ -158,6 +149,7 @@ addbenchmark("Local Function Call (10 args), 10 args", "ob(1, 2, 3, 4, 5, 6, 7, 
 
 addbenchmark("5-muls", "local ola = 7; local b = ola * ola * ola * ola * ola", make_func_noargs())
 addbenchmark("5-muls-as-exponent", "local ola = 7; local b = ola ^ 5", make_func_noargs())
+
 addbenchmark("5-unpack-noargs", "my_varargs_function5(unpack(five_array))", make_func_noargs(),
 [[
 local function my_varargs_function5(a1, a2, a3, a4, a5) return a1+a2+a3+a4+a5 end
@@ -170,19 +162,37 @@ local function my_varargs_function5(a1, a2, a3, a4, a5) return a1+a2+a3+a4+a5 en
 local five_array = { 1, 2, 3, 4, 5 }
 ]])
 
-addbenchmark("5-args-array-access", "my_varargs_function5(five_array[1], five_array[2], five_array[3], five_array[4], five_array[5]))", make_func_noargs(),
+addbenchmark("5-args-array-access", "my_varargs_function5(five_array[1], five_array[2], five_array[3], five_array[4], five_array[5])", make_func_noargs(),
 [[
 local function my_varargs_function5(a1, a2, a3, a4, a5) return a1+a2+a3+a4+a5 end
 local five_array = { 1, 2, 3, 4, 5 }
 ]])
 
 addbenchmark("% as is_int", "local value = 3.5; local is_int = value % 1 == 0", make_func_noargs())
-addbenchmark("func % as is_int", "local value = 3.5; local is_value_int = is_int(value)", make_func_noargs())
+
+addbenchmark("func % as is_int", "local value = 3.5; local is_value_int = is_int(value)", make_func_noargs(),
+[[
+local function is_int(v) return v%1 == 0 end
+]])
+
 addbenchmark("math.floor as is_int", "local value = 3.6; local is_int = math.floor(value) == value", make_func_noargs())
-addbenchmark("math_floor as is_int", "local value = 3.6; local is_int = math_floor(value) == value", make_func_noargs())
+
+addbenchmark("math_floor as is_int", "local value = 3.6; local is_int = math_floor(value) == value", make_func_noargs(),
+[[
+local math_floor = math.floor
+]])
+
 addbenchmark("% as to_int", "local value = 3.5; local value_as_int = value - (value % 1)", make_func_noargs())
-addbenchmark("func % as to_int", "local value = 3.5; local value_as_int = as_int(value)", make_func_noargs())
-addbenchmark("math_floor as to_int", "local value = 3.5; local value_as_int = math_floor(value)", make_func_noargs())
+
+addbenchmark("func % as to_int", "local value = 3.5; local value_as_int = as_int(value)", make_func_noargs(),
+[[
+local function as_int(v) return v - (v%1) end
+]])
+
+addbenchmark("math_floor as to_int", "local value = 3.5; local value_as_int = math_floor(value)", make_func_noargs(),
+[[
+local math_floor = math.floor
+]])
 addbenchmark("mul vs div: mul", "local value = 7; local result = value * 0.5", make_func_noargs())
 addbenchmark("mul vs div: div", "local value = 7; local result = value / 2", make_func_noargs())
 runbenchmarks(select(1,...) or 10000000)
